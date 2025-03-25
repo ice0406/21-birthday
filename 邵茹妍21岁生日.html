@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>生日快乐</title>
+    <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Ma Shan Zheng', cursive;
+        }
+        
+        #canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        
+        .birthday-text {
+            position: absolute;
+            color: #ff69b4;
+            text-align: center;
+            opacity: 0;
+            font-size: clamp(32px, 8vw, 64px);
+            text-shadow: 0 0 10px #ff00ff, 
+                         0 0 20px #ff00ff,
+                         0 0 30px #ff00ff;
+            z-index: 2;
+            animation: fadeIn 5s ease-in-out forwards;
+            line-height: 1.5;
+            font-weight: bold;
+        }
+        
+        .heart-balloon {
+            position: absolute;
+            z-index: 3;
+            opacity: 0;
+            animation: floatUp 8s linear forwards;
+        }
+        
+        .balloon-string {
+            position: absolute;
+            background: linear-gradient(to bottom, #fff, #ccc);
+            width: 1px;
+            height: 60px;
+            left: 50%;
+            bottom: -60px;
+            transform-origin: top center;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1.1); }
+        }
+        
+        @keyframes floatUp {
+            0% { 
+                transform: translateY(0) rotate(0deg);
+                opacity: 0.8;
+            }
+            100% { 
+                transform: translateY(-100vh) rotate(10deg);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes swing {
+            0%, 100% { transform: rotate(-3deg); }
+            50% { transform: rotate(3deg); }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div class="birthday-text">祝邵茹妍21岁生日快乐</div>
+    <div id="balloons-container"></div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const balloonsContainer = document.getElementById('balloons-container');
+        
+        // 适配不同屏幕尺寸
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        
+        // 烟花粒子类
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.velocity = {
+                    x: (Math.random() - 0.5) * 8,
+                    y: (Math.random() - 0.5) * 8
+                };
+                this.alpha = 1;
+                this.decay = Math.random() * 0.015 + 0.01;
+                this.size = Math.random() * 3 + 1;
+            }
+            
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+            
+            update() {
+                this.velocity.y += 0.05;
+                this.x += this.velocity.x;
+                this.y += this.velocity.y;
+                this.alpha -= this.decay;
+                this.draw();
+                return this.alpha > 0;
+            }
+        }
+        
+        // 烟花类
+        class Firework {
+            constructor(x, y, targetX, targetY, color) {
+                this.x = x;
+                this.y = y;
+                this.targetX = targetX;
+                this.targetY = targetY;
+                this.color = color;
+                this.particles = [];
+                this.speed = 2;
+                this.angle = Math.atan2(targetY - y, targetX - x);
+                this.velocity = {
+                    x: Math.cos(this.angle) * this.speed,
+                    y: Math.sin(this.angle) * this.speed
+                };
+                this.exploded = false;
+            }
+            
+            explode() {
+                for (let i = 0; i < 150; i++) {
+                    this.particles.push(new Particle(this.x, this.y, this.color));
+                }
+                this.exploded = true;
+            }
+            
+            update() {
+                if (!this.exploded) {
+                    this.x += this.velocity.x;
+                    this.y += this.velocity.y;
+                    
+                    const distance = Math.hypot(this.targetX - this.x, this.targetY - this.y);
+                    if (distance < 5) {
+                        this.explode();
+                    }
+                    
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, 2, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.fill();
+                    
+                    return true;
+                } else {
+                    this.particles = this.particles.filter(particle => particle.update());
+                    return this.particles.length > 0;
+                }
+            }
+        }
+        
+        // 随机颜色生成
+        function getRandomColor() {
+            const colors = [
+                '#ff0000', '#00ff00', '#0000ff', 
+                '#ffff00', '#ff00ff', '#00ffff',
+                '#ff9900', '#9900ff', '#ff0099'
+            ];
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+        
+        // 创建爱心气球SVG（带绳子）
+        function createHeartBalloon() {
+            const balloonWrapper = document.createElement('div');
+            balloonWrapper.className = 'heart-balloon';
+            
+            // 随机大小和位置
+            const size = Math.random() * 40 + 40;
+            const left = Math.random() * (window.innerWidth - size);
+            const delay = Math.random() * 3;
+            
+            balloonWrapper.innerHTML = `
+                <div style="position:relative;display:inline-block;">
+                    <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" 
+                              fill="#ff69b4" stroke="#ff1493" stroke-width="0.5"/>
+                    </svg>
+                    <div class="balloon-string" style="animation: swing 2s ease-in-out infinite ${Math.random() > 0.5 ? 'alternate' : 'alternate-reverse'}"></div>
+                </div>
+            `;
+            
+            balloonWrapper.style.left = `${left}px`;
+            balloonWrapper.style.bottom = `-${size}px`;
+            balloonWrapper.style.animationDelay = `${delay}s`;
+            
+            return balloonWrapper;
+        }
+        
+        // 发射爱心气球
+        function launchBalloons() {
+            const balloonCount = 25;
+            
+            for (let i = 0; i < balloonCount; i++) {
+                setTimeout(() => {
+                    const balloon = createHeartBalloon();
+                    balloonsContainer.appendChild(balloon);
+                    
+                    // 气球消失后移除
+                    setTimeout(() => {
+                        balloon.remove();
+                    }, 8000);
+                }, i * 200);
+            }
+        }
+        
+        // 批量发射烟花（一次3-5束）
+        function launchFireworksBatch() {
+            const batchSize = Math.floor(Math.random() * 3) + 3; // 3-5束
+            
+            for (let i = 0; i < batchSize; i++) {
+                setTimeout(() => {
+                    const x = Math.random() * canvas.width;
+                    const y = canvas.height;
+                    const targetX = Math.random() * canvas.width;
+                    const targetY = Math.random() * canvas.height * 0.6;
+                    const color = getRandomColor();
+                    
+                    fireworks.push(new Firework(x, y, targetX, targetY, color));
+                }, i * 200);
+            }
+        }
+        
+        // 自动发射烟花
+        let fireworks = [];
+        function autoFire() {
+            launchFireworksBatch();
+            setTimeout(autoFire, Math.random() * 1000 + 800);
+        }
+        
+        // 动画循环
+        function animate() {
+            requestAnimationFrame(animate);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            fireworks = fireworks.filter(firework => firework.update());
+        }
+        
+        // 点击发射烟花
+        canvas.addEventListener('click', (e) => {
+            launchFireworksBatch();
+        });
+        
+        // 启动
+        autoFire();
+        animate();
+        
+        // 文字显示5秒后发射气球
+        setTimeout(launchBalloons, 5000);
+        
+        // 每30秒再发射一波气球
+        setInterval(launchBalloons, 30000);
+    </script>
+</body>
+</html>
